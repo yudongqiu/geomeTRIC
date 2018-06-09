@@ -1450,11 +1450,19 @@ class InternalCoordinates(object):
         fail_counter = 0
         while True:
             microiter += 1
-            Bmat = np.matrix(self.wilsonB(xyz1))
-            Ginv = self.GInverse(xyz1)
             # Get new Cartesian coordinates
-            dxyz = damp*Bmat.T*Ginv * np.matrix(dQ1).T
-            xyz2 = xyz1 + np.array(dxyz).flatten()
+            testxyz = xyz1.copy()
+            for _ in range(10):
+                try:
+                    Bmat = self.wilsonB(testxyz)
+                    Binv = np.linalg.pinv(Bmat)
+                    break
+                except np.linalg.LinAlgError:
+                    testxyz += 0.01 * np.random.random(testxyz.shape)
+            else:
+                raise RuntimeError('Too many failures in np.linalg.pinv')
+            dxyz = damp * np.dot(Binv, dQ1.T)
+            xyz2 = xyz1 + dxyz
             if microiter == 1:
                 xyzsave = xyz2.copy()
                 xyz_iter1 = xyz2.copy()
