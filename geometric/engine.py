@@ -691,6 +691,8 @@ class QCEngineAPI(Engine):
         new_schema = deepcopy(self.schema)
         new_schema["molecule"]["geometry"] = coords.tolist()
         ret = qcengine.compute(new_schema, self.program)
+        if ret['success'] == False:
+            raise RuntimeError("RDKit got an error:\n%s" % ret['error'])
         # store the schema_traj for run_json to pick up
         self.schema_traj.append(ret)
         energy = ret["properties"]["return_energy"]
@@ -700,4 +702,3 @@ class QCEngineAPI(Engine):
     def calc(self, coords, dirname):
         # overwrites the calc method of base class to skip caching and creating folders
         return self.calc_new(coords, dirname)
-
