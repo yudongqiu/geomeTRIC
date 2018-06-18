@@ -1398,6 +1398,7 @@ class InternalCoordinates(object):
                 Bmat = self.wilsonB(xyz)
                 return np.dot(np.linalg.pinv(Bmat.T), gradx)
             except np.linalg.LinAlgError:
+                print("Warning: pinv failed!!")
                 xyz += 0.01 * np.random.random(xyz.shape)
         else:
             raise RuntimeError("Too many failures in np.linalg.pinv")
