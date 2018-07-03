@@ -4,11 +4,6 @@ import json
 import geometric
 import copy
 
-def get_qc_schema_traj(qc_schema_input, progress):
-    qc_schema_traj = []
-
-    return qc_schema_traj
-
 def parse_input_json_dict(in_json_dict):
     """
     Parse an input json dictionary into options, example:
@@ -67,6 +62,17 @@ def get_output_json_dict(in_json_dict, schema_traj):
     })
     return out_json_dict
 
+def make_constraints_string(constraints_dict):
+    """ Convert the new constraints dict format into the original string format """
+    constraints_string = ''
+    for key, value_list in constraints_dict.items():
+        if key not in ('freeze', 'set', 'scan'):
+            raise KeyError("constraints key %s is not recognized" % key)
+        constraints_string += '$' + key + '\n'
+        for spec_tuple in value_list:
+            constraints_string += ' '.join(spec_tuple) + '\n'
+    return constraints_string
+
 def geometric_run_json(in_json_dict):
     """ Take a input dictionary loaded from json, and return an output dictionary for json """
     input_opts = parse_input_json_dict(copy.deepcopy(in_json_dict))
@@ -74,11 +80,11 @@ def geometric_run_json(in_json_dict):
     # Get initial coordinates in bohr
     coords = M.xyzs[0].flatten() * geometric.nifty.ang2bohr
     # Read in the constraints
-    constraints = input_opts.get('constraints', None)
-    if constraints is not None:
-        Cons, CVals = geometric.optimize.ParseConstraints(M, constraints)
-    else:
-        Cons, CVals = None, None
+    constraints_dict = input_opts.get('constraints', {})
+    constraints_string = make_constraints_string(constraints_dict)
+    Cons, CVals = None, None
+    if constraints_string:
+        Cons, CVals = geometric.optimize.ParseConstraints(M, constraints_string)
     # set up the internal coordinate system
     coordsys = input_opts.get('coordsys', 'tric')
     CoordSysDict = {'cart':(geometric.internal.CartesianCoordinates, False, False),
