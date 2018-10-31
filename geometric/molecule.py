@@ -17,6 +17,7 @@ from warnings import warn
 
 import numpy as np
 from numpy import sin, cos, arccos
+from numpy.linalg import multi_dot
 from pkg_resources import parse_version
 
 # For Python 3 compatibility
@@ -200,9 +201,13 @@ except (ImportError, ValueError):
             message = record.getMessage()
             self.stream.write(message)
             self.flush()
-    logger=getLogger()
-    logger.handlers = [RawStreamHandler(sys.stdout)]
+    # logger=getLogger()
+    # logger.handlers = [RawStreamHandler(sys.stdout)]
+    # LPW: Daniel Smith suggested the below four lines to improve logger behavior
+    logger = getLogger("MoleculeLogger")
     logger.setLevel(INFO)
+    handler = RawStreamHandler()
+    logger.addHandler(handler)
 
 module_name = __name__.replace('.molecule','')
 
@@ -339,7 +344,7 @@ def isint(word):
 
 def isfloat(word):
     """Matches ANY number; it can be a decimal, scientific notation, integer, or what have you"""
-    return re.match('^[-+]?[0-9]*\.?[0-9]*([eEdD][-+]?[0-9]+)?$',word)
+    return re.match(r'^[-+]?[0-9]*\.?[0-9]*([eEdD][-+]?[0-9]+)?$',word)
 
 # Used to get the white spaces in a split line.
 splitter = re.compile(r'(\s+|\S+)')
@@ -358,12 +363,12 @@ def CubicLattice(a):
     bet  = beta*np.pi/180
     gamm = gamma*np.pi/180
     v = np.sqrt(1 - cos(alph)**2 - cos(bet)**2 - cos(gamm)**2 + 2*cos(alph)*cos(bet)*cos(gamm))
-    Mat = np.matrix([[a, b*cos(gamm), c*cos(bet)],
-                  [0, b*sin(gamm), c*((cos(alph)-cos(bet)*cos(gamm))/sin(gamm))],
-                  [0, 0, c*v/sin(gamm)]])
-    L1 = Mat*np.matrix([[1],[0],[0]])
-    L2 = Mat*np.matrix([[0],[1],[0]])
-    L3 = Mat*np.matrix([[0],[0],[1]])
+    Mat = np.array([[a, b*cos(gamm), c*cos(bet)],
+                    [0, b*sin(gamm), c*((cos(alph)-cos(bet)*cos(gamm))/sin(gamm))],
+                    [0, 0, c*v/sin(gamm)]])
+    L1 = Mat.dot(np.array([[1],[0],[0]]))
+    L2 = Mat.dot(np.array([[0],[1],[0]]))
+    L3 = Mat.dot(np.array([[0],[0],[1]]))
     return Box(a,b,c,alpha,beta,gamma,np.array(L1).flatten(),np.array(L2).flatten(),np.array(L3).flatten(),v*a*b*c)
 
 def BuildLatticeFromLengthsAngles(a, b, c, alpha, beta, gamma):
@@ -372,12 +377,12 @@ def BuildLatticeFromLengthsAngles(a, b, c, alpha, beta, gamma):
     bet  = beta*np.pi/180
     gamm = gamma*np.pi/180
     v = np.sqrt(1 - cos(alph)**2 - cos(bet)**2 - cos(gamm)**2 + 2*cos(alph)*cos(bet)*cos(gamm))
-    Mat = np.matrix([[a, b*cos(gamm), c*cos(bet)],
-                  [0, b*sin(gamm), c*((cos(alph)-cos(bet)*cos(gamm))/sin(gamm))],
-                  [0, 0, c*v/sin(gamm)]])
-    L1 = Mat*np.matrix([[1],[0],[0]])
-    L2 = Mat*np.matrix([[0],[1],[0]])
-    L3 = Mat*np.matrix([[0],[0],[1]])
+    Mat = np.array([[a, b*cos(gamm), c*cos(bet)],
+                    [0, b*sin(gamm), c*((cos(alph)-cos(bet)*cos(gamm))/sin(gamm))],
+                    [0, 0, c*v/sin(gamm)]])
+    L1 = Mat.dot(np.array([[1],[0],[0]]))
+    L2 = Mat.dot(np.array([[0],[1],[0]]))
+    L3 = Mat.dot(np.array([[0],[0],[1]]))
     return Box(a,b,c,alpha,beta,gamma,np.array(L1).flatten(),np.array(L2).flatten(),np.array(L3).flatten(),v*a*b*c)
 
 def BuildLatticeFromVectors(v1, v2, v3):
@@ -392,12 +397,12 @@ def BuildLatticeFromVectors(v1, v2, v3):
     bet  = beta*np.pi/180
     gamm = gamma*np.pi/180
     v = np.sqrt(1 - cos(alph)**2 - cos(bet)**2 - cos(gamm)**2 + 2*cos(alph)*cos(bet)*cos(gamm))
-    Mat = np.matrix([[a, b*cos(gamm), c*cos(bet)],
-                  [0, b*sin(gamm), c*((cos(alph)-cos(bet)*cos(gamm))/sin(gamm))],
-                  [0, 0, c*v/sin(gamm)]])
-    L1 = Mat*np.matrix([[1],[0],[0]])
-    L2 = Mat*np.matrix([[0],[1],[0]])
-    L3 = Mat*np.matrix([[0],[0],[1]])
+    Mat = np.array([[a, b*cos(gamm), c*cos(bet)],
+                    [0, b*sin(gamm), c*((cos(alph)-cos(bet)*cos(gamm))/sin(gamm))],
+                    [0, 0, c*v/sin(gamm)]])
+    L1 = Mat.dot(np.array([[1],[0],[0]]))
+    L2 = Mat.dot(np.array([[0],[1],[0]]))
+    L3 = Mat.dot(np.array([[0],[0],[1]]))
     return Box(a,b,c,alpha,beta,gamma,np.array(L1).flatten(),np.array(L2).flatten(),np.array(L3).flatten(),v*a*b*c)
 
 #===========================#
@@ -618,26 +623,26 @@ def either(A, B, key):
 #===========================#
 def EulerMatrix(T1,T2,T3):
     """ Constructs an Euler matrix from three Euler angles. """
-    DMat = np.matrix(np.zeros((3,3)))
+    DMat = np.zeros((3,3))
     DMat[0,0] = np.cos(T1)
     DMat[0,1] = np.sin(T1)
     DMat[1,0] = -np.sin(T1)
     DMat[1,1] = np.cos(T1)
     DMat[2,2] = 1
-    CMat = np.matrix(np.zeros((3,3)))
+    CMat = np.zeros((3,3))
     CMat[0,0] = 1
     CMat[1,1] = np.cos(T2)
     CMat[1,2] = np.sin(T2)
     CMat[2,1] = -np.sin(T2)
     CMat[2,2] = np.cos(T2)
-    BMat = np.matrix(np.zeros((3,3)))
+    BMat = np.zeros((3,3))
     BMat[0,0] = np.cos(T3)
     BMat[0,1] = np.sin(T3)
     BMat[1,0] = -np.sin(T3)
     BMat[1,1] = np.cos(T3)
     BMat[2,2] = 1
-    EMat = BMat*CMat*DMat
-    return np.matrix(EMat)
+    EMat = multi_dot([BMat, CMat, DMat])
+    return EMat
 
 def ComputeOverlap(theta,elem,xyz1,xyz2):
     """
@@ -645,7 +650,7 @@ def ComputeOverlap(theta,elem,xyz1,xyz2):
     fictitious density.  Good for fine-tuning alignment but gets stuck
     in local minima.
     """
-    xyz2R = np.array(EulerMatrix(theta[0],theta[1],theta[2])*np.matrix(xyz2.T)).T
+    xyz2R = np.dot(EulerMatrix(theta[0],theta[1],theta[2]), xyz2.T).T
     Obj = 0.0
     elem = np.array(elem)
     for i in set(elem):
@@ -664,7 +669,7 @@ def AlignToDensity(elem,xyz1,xyz2,binary=False):
     grid = np.pi*np.array(list(itertools.product([0,1],[0,1],[0,1])))
     ovlp = np.array([ComputeOverlap(e, elem, xyz1, xyz2) for e in grid]) # Mao
     t1 = grid[np.argmin(ovlp)]
-    xyz2R = np.array(EulerMatrix(t1[0],t1[1],t1[2])*np.matrix(xyz2.T)).T.copy()
+    xyz2R = np.dot(EulerMatrix(t1[0],t1[1],t1[2]), xyz2.T).T.copy()
     return xyz2R
 
 def AlignToMoments(elem,xyz1,xyz2=None):
@@ -687,7 +692,7 @@ def AlignToMoments(elem,xyz1,xyz2=None):
         if np.abs(determ + 1.0) > Thresh:
             print("in AlignToMoments, determinant is % .3f" % determ)
         BB[:,2] *= -1
-    xyzr = np.array(np.matrix(BB).T * np.matrix(xyz).T).T.copy()
+    xyzr = np.dot(BB.T, xyz.T).T.copy()
     if xyz2 is not None:
         xyzrr = AlignToDensity(elem,xyz1,xyzr,binary=True)
         return xyzrr
@@ -714,20 +719,17 @@ def get_rotate_translate(matrix1,matrix2):
 
     # Do the SVD in order to get rotation matrix
     v,s,wt = np.linalg.svd(covar)
-    v = np.matrix(v)
-    wt = np.matrix(wt)
 
     # Rotation matrix
     # Transposition of v,wt
-    wvt = wt.T*v.T
+    wvt = np.dot(wt.T, v.T)
 
     # Ensure a right-handed coordinate system
-    d = np.matrix(np.eye(3))
+    d = np.eye(3)
     if np.linalg.det(wvt) < 0:
         d[2,2] = -1.0
 
-    rot_matrix = np.array((wt.T*d*v.T).T)
-    # rot_matrix = np.transpose(np.dot(np.transpose(wt),np.transpose(v)))
+    rot_matrix = multi_dot([wt.T,d,v.T]).T
     trans_matrix = avg_pos2-np.dot(avg_pos1,rot_matrix)
     return trans_matrix, rot_matrix
 
@@ -815,10 +817,10 @@ def extract_pop(M, verbose=True):
     """
 
     # Read in the charge and spin on the whole system.
-    srch  = lambda s : np.array([float(re.search('(?<=%s )[-+]?[0-9]*\.?[0-9]*([eEdD][-+]?[0-9]+)?' % s, c).group(0)) for c in M.comms if all([i in c for i in ('charge', 'sz')])])
+    srch  = lambda s : np.array([float(re.search(r'(?<=%s )[-+]?[0-9]*\.?[0-9]*([eEdD][-+]?[0-9]+)?' % s, c).group(0)) for c in M.comms if all([i in c for i in ('charge', 'sz')])])
     Chgs  = srch('charge') # An array of the net charge.
     SpnZs = srch('sz')    # An array of the net Z-spin.
-    Spn2s = srch('sz\^2') # An array of the sum of sz^2 by atom.
+    Spn2s = srch(r'sz\^2') # An array of the sum of sz^2 by atom.
 
     chg, chgpass = extract_int(Chgs, 0.3, 1.0, label="charge")
     spn, spnpass = extract_int(abs(SpnZs), 0.3, 1.0, label="spin-z")
@@ -2684,6 +2686,8 @@ class Molecule(object):
         atomname = []
         atomtype = []
         elem     = []
+        resname  = []
+        resid    = []
         data = Mol2.mol2_set(fnm)
         if len(data.compounds) > 1:
             sys.stderr.write("Not sure what to do if the MOL2 file contains multiple compounds\n")
@@ -2692,13 +2696,15 @@ class Molecule(object):
             charge.append(atom.charge)
             atomname.append(atom.atom_name)
             atomtype.append(atom.atom_type)
+            resname.append(atom.subst_name)
+            resid.append(atom.subst_id)
             thiselem = atom.atom_name
             if len(thiselem) > 1:
                 thiselem = thiselem[0] + re.sub('[A-Z0-9]','',thiselem[1:])
             elem.append(thiselem)
 
-        resname = [list(data.compounds.items())[0][0] for i in range(len(elem))]
-        resid = [1 for i in range(len(elem))]
+        # resname = [list(data.compounds.items())[0][0] for i in range(len(elem))]
+        # resid = [1 for i in range(len(elem))]
 
         # Deprecated 'abonds' format.
         # bonds    = [[] for i in range(len(elem))]
@@ -2977,7 +2983,7 @@ class Molecule(object):
         for line in open(fnm):
             line = line.strip().expandtabs()
             sline = line.split()
-            if re.match('^\*',line):
+            if re.match(r'^\*',line):
                 if len(sline) == 1:
                     comms.append(';'.join(list(thiscomm)))
                     thiscomm = []
@@ -3063,8 +3069,8 @@ class Molecule(object):
             dline = line.split('!')[0].split()
             if "Z-matrix Print" in line:
                 zmatrix = True
-            if re.match('^\$',line):
-                wrd = re.sub('\$','',line).lower()
+            if re.match(r'^\$',line):
+                wrd = re.sub(r'\$','',line).lower()
                 if zmatrix:
                     if wrd == 'end':
                         zmatrix = False
@@ -3303,16 +3309,16 @@ class Molecule(object):
         convThis = 0
         readChargeMult = 0
         energy_scf = []
-        float_match  = {'energy_scfThis'   : ("^[1-9][0-9]* +[-+]?([0-9]*\.)?[0-9]+ +[-+]?([0-9]*\.)?[0-9]+([eE][-+]?[0-9]+)[A-Za-z0 ]*$", 1),
-                        'energy_opt'       : ("^Final energy is +[-+]?([0-9]*\.)?[0-9]+$", -1),
+        float_match  = {'energy_scfThis'   : (r"^[1-9][0-9]* +[-+]?([0-9]*\.)?[0-9]+ +[-+]?([0-9]*\.)?[0-9]+([eE][-+]?[0-9]+)[A-Za-z0 ]*$", 1),
+                        'energy_opt'       : (r"^Final energy is +[-+]?([0-9]*\.)?[0-9]+$", -1),
                         'charge'           : ("Sum of atomic charges", -1),
                         'mult'             : ("Sum of spin +charges", -1),
-                        'energy_mp2'       : ("^(ri)*(-)*mp2 +total energy += +[-+]?([0-9]*\.)?[0-9]+ +au$",-2),
-                        'energy_ccsd'      : ("^CCSD Total Energy += +[-+]?([0-9]*\.)?[0-9]+$",-1),
-                        'energy_ccsdt'     : ("^CCSD\(T\) Total Energy += +[-+]?([0-9]*\.)?[0-9]+$",-1),
-                        'zpe'              : ("^(\s+)?Zero point vibrational energy:\s+[-+]?([0-9]*\.)?[0-9]+\s+kcal\/mol$", -2),
-                        'entropy'          : ("^(\s+)?Total Entropy:\s+[-+]?([0-9]*\.)?[0-9]+\s+cal\/mol\.K$", -2),
-                        'enthalpy'         : ("^(\s+)?Total Enthalpy:\s+[-+]?([0-9]*\.)?[0-9]+\s+kcal\/mol$", -2)
+                        'energy_mp2'       : (r"^(ri)*(-)*mp2 +total energy += +[-+]?([0-9]*\.)?[0-9]+ +au$",-2),
+                        'energy_ccsd'      : (r"^CCSD Total Energy += +[-+]?([0-9]*\.)?[0-9]+$",-1),
+                        'energy_ccsdt'     : (r"^CCSD\(T\) Total Energy += +[-+]?([0-9]*\.)?[0-9]+$",-1),
+                        'zpe'              : (r"^(\s+)?Zero point vibrational energy:\s+[-+]?([0-9]*\.)?[0-9]+\s+kcal\/mol$", -2),
+                        'entropy'          : (r"^(\s+)?Total Entropy:\s+[-+]?([0-9]*\.)?[0-9]+\s+cal\/mol\.K$", -2),
+                        'enthalpy'         : (r"^(\s+)?Total Enthalpy:\s+[-+]?([0-9]*\.)?[0-9]+\s+kcal\/mol$", -2)
                         }
         matrix_match = {'analytical_grad'  :'Full Analytical Gradient',
                         'gradient_scf'     :'Gradient of SCF Energy',
@@ -3371,7 +3377,7 @@ class Molecule(object):
                 fatal = 1
             if XMode >= 1:
                 # Perfectionist here; matches integer, element, and three floating points
-                if re.match("^[0-9]+ +[A-Z][A-Za-z]?( +[-+]?([0-9]*\.)?[0-9]+){3}$", line):
+                if re.match(r"^[0-9]+ +[A-Z][A-Za-z]?( +[-+]?([0-9]*\.)?[0-9]+){3}$", line):
                     XMode = 2
                     sline = line.split()
                     elemThis.append(sline[1])
@@ -3390,12 +3396,12 @@ class Molecule(object):
                 XMode = 1
             if MMode >= 1:
                 # Perfectionist here; matches integer, element, and two floating points
-                if re.match("^[0-9]+ +[A-Z][a-z]?( +[-+]?([0-9]*\.)?[0-9]+){2}$", line):
+                if re.match(r"^[0-9]+ +[A-Z][a-z]?( +[-+]?([0-9]*\.)?[0-9]+){2}$", line):
                     MMode = 2
                     sline = line.split()
                     mkchgThis.append(float(sline[2]))
                     mkspnThis.append(float(sline[3]))
-                elif re.match("^[0-9]+ +[A-Z][a-z]?( +[-+]?([0-9]*\.)?[0-9]+){1}$", line):
+                elif re.match(r"^[0-9]+ +[A-Z][a-z]?( +[-+]?([0-9]*\.)?[0-9]+){1}$", line):
                     MMode = 2
                     sline = line.split()
                     mkchgThis.append(float(sline[2]))
@@ -3466,7 +3472,7 @@ class Molecule(object):
                 pcmgradmode = True
             if pcmgradmode:
                 # Perfectionist here; matches integer, and three floating points
-                if re.match("^[0-9]+ +( +[-+]?([0-9]*\.)?[0-9]+){3}$", line):
+                if re.match(r"^[0-9]+ +( +[-+]?([0-9]*\.)?[0-9]+){3}$", line):
                     pcmgrad.append([float(i) for i in line.split()[1:]])
                 if 'Gradient time' in line:
                     pcmgradmode = False
@@ -3505,7 +3511,7 @@ class Molecule(object):
                         Mats[key]["Strip"] = []
                         Mats[key]["Mode"] = 2
                     # Match a single integer followed by any number of floats.  This is a strip of data to be added to the matrix
-                    elif re.match("^[0-9]+( +[-+]?([0-9]*\.)?[0-9]+)+$",line):
+                    elif re.match(r"^[0-9]+( +[-+]?([0-9]*\.)?[0-9]+)+$",line):
                         Mats[key]["Strip"].append([float(i) for i in line.split()[1:]])
                     # In any other case, the matrix is terminated.
                     elif Mats[key]["Mode"] >= 2:
@@ -3911,15 +3917,19 @@ class Molecule(object):
             logger.error("Unable to init DCD plugin\n")
             raise IOError
         natoms    = c_int(self.na)
-        dcd       = _dcdlib.open_dcd_write(self.fout, "dcd", natoms)
+        fname     = self.fout.encode('ascii')
+        dcd       = _dcdlib.open_dcd_write(create_string_buffer(fname), "dcd", natoms)
         ts        = MolfileTimestep()
         _xyz      = c_float * (natoms.value * 3)
         for I in selection:
             xyz = self.xyzs[I]
             ts.coords = _xyz(*list(xyz.flatten()))
-            ts.A      = self.boxes[I].a if 'boxes' in self.Data else 1.0
-            ts.B      = self.boxes[I].b if 'boxes' in self.Data else 1.0
-            ts.C      = self.boxes[I].c if 'boxes' in self.Data else 1.0
+            ts.A      = c_float(self.boxes[I].a if 'boxes' in self.Data else 1.0)
+            ts.B      = c_float(self.boxes[I].b if 'boxes' in self.Data else 1.0)
+            ts.C      = c_float(self.boxes[I].c if 'boxes' in self.Data else 1.0)
+            ts.alpha  = c_float(self.boxes[I].alpha  if 'boxes' in self.Data else 90.0)
+            ts.beta   = c_float(self.boxes[I].beta   if 'boxes' in self.Data else 90.0)
+            ts.gamma  = c_float(self.boxes[I].gamma  if 'boxes' in self.Data else 90.0)
             result    = _dcdlib.write_timestep(dcd, byref(ts))
             if result != 0:
                 logger.error("Error encountered when writing DCD\n")

@@ -9,6 +9,7 @@ from copy import deepcopy
 
 import networkx as nx
 import numpy as np
+from numpy.linalg import multi_dot
 
 from geometric.molecule import Elements, Radii
 from geometric.nifty import click, commadash, ang2bohr, bohr2ang
@@ -69,28 +70,28 @@ def d_ncross(a, b):
     return answer
 
 def nudot(a, b):
-    """
+    r"""
     Given two vectors a and b, return the dot product (\hat{a}).b.
     """
     ev = a / np.linalg.norm(a)
     return np.dot(ev, b)
 
 def d_nudot(a, b):
-    """
+    r"""
     Given two vectors a and b, return the gradient of
     the norm of the dot product (\hat{a}).b w/r.t. a.
     """
     return np.dot(d_unit_vector(a), b)
 
 def ucross(a, b):
-    """
+    r"""
     Given two vectors a and b, return the cross product (\hat{a})xb.
     """
     ev = a / np.linalg.norm(a)
     return np.cross(ev, b)
 
 def d_ucross(a, b):
-    """
+    r"""
     Given two vectors a and b, return the gradient of
     the cross product (\hat{a})xb w/r.t. a.
     """
@@ -98,14 +99,14 @@ def d_ucross(a, b):
     return np.dot(d_unit_vector(a), d_cross(ev, b))
 
 def nucross(a, b):
-    """
+    r"""
     Given two vectors a and b, return the norm of the cross product (\hat{a})xb.
     """
     ev = a / np.linalg.norm(a)
     return np.linalg.norm(np.cross(ev, b))
 
 def d_nucross(a, b):
-    """
+    r"""
     Given two vectors a and b, return the gradient of
     the norm of the cross product (\hat{a})xb w/r.t. a.
     """
@@ -472,7 +473,7 @@ class Rotator(object):
                 #     fdxdum[i] = (dPlus-dMinus)/(2*h)
                 # if np.linalg.norm(dexdum - fdxdum) > 1e-6:
                 #     print dexdum - fdxdum
-                #     sys.exit()
+                #     raise Exception()
                 # Apply terms from chain rule
                 deriv_raw[0]  -= np.dot(dexdum, deriv_raw[-1])
                 for i in range(len(self.a)):
@@ -862,7 +863,7 @@ class LinearAngle(object):
         ## Finite difference derivatives
         ## if np.linalg.norm(derivatives - fderivatives) > 1e-6:
         ##     print np.linalg.norm(derivatives - fderivatives)
-        ##     sys.exit()
+        ##     raise Exception()
         return derivatives
 
 class MultiAngle(object):
@@ -1300,8 +1301,8 @@ class InternalCoordinates(object):
         Given Cartesian coordinates xyz, return the G-matrix
         given by G = BuBt where u is an arbitrary matrix (default to identity)
         """
-        Bmat = np.matrix(self.wilsonB(xyz))
-        BuBt = Bmat*Bmat.T
+        Bmat = self.wilsonB(xyz)
+        BuBt = np.dot(Bmat,Bmat.T)
         return BuBt
 
     def GInverse_SVD(self, xyz):
@@ -1324,8 +1325,8 @@ class InternalCoordinates(object):
                 continue
             break
         # print "Build G: %.3f SVD: %.3f" % (time_G, time_svd),
-        V = np.matrix(VT).T
-        UT = np.matrix(U).T
+        V = VT.T
+        UT = U.T
         Sinv = np.zeros_like(S)
         LargeVals = 0
         for ival, value in enumerate(S):
@@ -1334,9 +1335,9 @@ class InternalCoordinates(object):
                 LargeVals += 1
                 Sinv[ival] = 1/value
         # print "%i atoms; %i/%i singular values are > 1e-6" % (xyz.shape[0], LargeVals, len(S))
-        Sinv = np.matrix(np.diag(Sinv))
-        Inv = np.matrix(V)*Sinv*np.matrix(UT)
-        return np.matrix(V)*Sinv*np.matrix(UT)
+        Sinv = np.diag(Sinv)
+        Inv = multi_dot([V, Sinv, UT])
+        return Inv
 
     def GInverse_EIG(self, xyz):
         xyz = xyz.reshape(-1,3)
@@ -1387,8 +1388,9 @@ class InternalCoordinates(object):
         Ginv = self.GInverse(xyz)
         Bmat = self.wilsonB(xyz)
         # Internal coordinate gradient
-        Gq = np.matrix(Ginv)*np.matrix(Bmat)*np.matrix(gradx).T
-        return np.array(Gq).flatten()
+        # Gq = np.matrix(Ginv)*np.matrix(Bmat)*np.matrix(gradx).T
+        Gq = multi_dot([Ginv, Bmat, gradx.T])
+        return Gq.flatten()
 
     def calcGrad(self, xyz, gradx):
         xyz = xyz.copy()
@@ -2155,7 +2157,7 @@ class PrimitiveInternalCoordinates(InternalCoordinates):
                 Hdiag.append(0.05)
             else:
                 raise RuntimeError('Failed to build guess Hessian matrix. Make sure all IC types are supported')
-        return np.matrix(np.diag(Hdiag))
+        return np.diag(Hdiag)
 
 
 class DelocalizedInternalCoordinates(InternalCoordinates):
@@ -2340,10 +2342,14 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
             return gradx
         Bmat = self.wilsonB(xyz)
         # Internal coordinate gradient
-        Gq = self.calcGrad(xyz, gradx)
+        # Gq = np.matrix(Ginv)*np.matrix(Bmat)*np.matrix(gradx).T
+        Gq = multi_dot([Ginv, Bmat, gradx.T])
+        Gqc = np.array(Gq).flatten()
         # Remove the directions that are along the DLCs that we are constraining
-        Gq[self.cDLC] = 0
-        Gxc = np.dot(Bmat.T, Gq.T)
+        for i in self.cDLC:
+            Gqc[i] = 0.0
+        # Gxc = np.array(np.matrix(Bmat.T)*np.matrix(Gqc).T).flatten()
+        Gxc = multi_dot([Bmat.T, Gqc.T]).flatten()
         return Gxc
 
     def build_dlc(self, xyz):
@@ -2408,7 +2414,7 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
                 cVec = np.array(cVec)
                 cVec /= np.linalg.norm(cVec)
                 # This is a "new DLC" that corresponds to the primitive that we are constraining
-                cProj = self.Vecs*np.matrix(cVec.T)
+                cProj = np.dot(self.Vecs,cVec.T)
                 cProj /= np.linalg.norm(cProj)
                 V.append(np.array(cProj).flatten())
                 # print c, cProj[iPrim]
@@ -2435,7 +2441,7 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
                 elif len(U) < self.Vecs.shape[1]:
                     raise RuntimeError('Gram-Schmidt orthogonalization has failed (expect %i length %i)' % (self.Vecs.shape[1], len(U)))
             # print "Gram-Schmidt completed with thre=%.0e" % thre
-            self.Vecs = np.matrix(U).T
+            self.Vecs = np.array(U).T
             # Constrained DLCs are on the left of self.Vecs.
             self.cDLC = [i for i in range(len(self.Prims.cPrims))]
 
@@ -2464,7 +2470,7 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
             cVec = np.array(cVec)
             cVec /= np.linalg.norm(cVec)
             # This is a "new DLC" that corresponds to the primitive that we are constraining
-            cProj = self.Vecs*np.matrix(cVec.T)
+            cProj = np.dot(self.Vecs,cVec.T)
             cProj /= np.linalg.norm(cProj)
             V.append(np.array(cProj).flatten())
         # V contains the constraint vectors on the left, and the original DLCs on the right
@@ -2490,7 +2496,7 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
             elif len(U) < self.Vecs.shape[1]:
                 raise RuntimeError('Gram-Schmidt orthogonalization has failed (expect %i length %i)' % (self.Vecs.shape[1], len(U)))
         # print "Gram-Schmidt completed with thre=%.0e" % thre
-        self.Vecs = np.matrix(U).T
+        self.Vecs = np.array(U).T
         # Constrained DLCs are on the left of self.Vecs.
         # for i, p in enumerate(self.Prims.Internals):
         #     print "%20s" % p,
@@ -2511,14 +2517,14 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
         xyz : np.ndarray
             Flat array containing Cartesian coordinates in atomic units
         """
-        Bmat = np.matrix(self.wilsonB(xyz))
+        Bmat = self.wilsonB(xyz)
         Ginv = self.GInverse(xyz, None)
         eps = 1e-6
         dxdq = np.zeros(len(self.Internals))
         for i in range(len(self.Internals)):
             dQ = np.zeros(len(self.Internals), dtype=float)
             dQ[i] = eps
-            dxyz = Bmat.T*Ginv * np.matrix(dQ).T
+            dxyz = multi_dot([Bmat.T, Ginv , dQ.T])
             rmsd = np.sqrt(np.mean(np.sum(np.array(dxyz).reshape(-1,3)**2, axis=1)))
             dxdq[i] = rmsd/eps
         dxdq /= np.max(dxdq)
@@ -2538,13 +2544,13 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
     def calcDiff(self, coord1, coord2):
         """ Calculate difference in internal coordinates, accounting for changes in 2*pi of angles. """
         PMDiff = self.Prims.calcDiff(coord1, coord2)
-        Answer = np.matrix(PMDiff)*self.Vecs
+        Answer = np.dot(PMDiff, self.Vecs)
         return np.array(Answer).flatten()
 
     def calculate(self, coords):
         """ Calculate the DLCs given the Cartesian coordinates. """
         PrimVals = self.Prims.calculate(coords)
-        Answer = np.matrix(PrimVals)*self.Vecs
+        Answer = np.dot(PrimVals, self.Vecs)
         # To obtain the primitive coordinates from the delocalized internal coordinates,
         # simply multiply self.Vecs*Answer.T where Answer.T is the column vector of delocalized
         # internal coordinates. That means the "c's" in Equation 23 of Schlegel's review paper
@@ -2577,8 +2583,8 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
     def guess_hessian(self, coords):
         """ Build the guess Hessian, consisting of a diagonal matrix
         in the primitive space and changed to the basis of DLCs. """
-        Hprim = np.matrix(self.Prims.guess_hessian(coords))
-        return np.array(self.Vecs.T*Hprim*self.Vecs)
+        Hprim = self.Prims.guess_hessian(coords)
+        return multi_dot([self.Vecs.T,Hprim,self.Vecs])
 
     def resetRotations(self, xyz):
         """ Reset the reference geometries for calculating the orientational variables. """
