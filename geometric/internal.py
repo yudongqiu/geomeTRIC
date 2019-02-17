@@ -2361,13 +2361,12 @@ class DelocalizedInternalCoordinates(InternalCoordinates):
         Bmat = self.wilsonB(xyz)
         # Internal coordinate gradient
         # Gq = np.matrix(Ginv)*np.matrix(Bmat)*np.matrix(gradx).T
-        Gq = multi_dot([Ginv, Bmat, gradx.T])
+        Gq = self.calcGrad(xyz, gradx)
         Gqc = np.array(Gq).flatten()
         # Remove the directions that are along the DLCs that we are constraining
-        for i in self.cDLC:
-            Gqc[i] = 0.0
+        Gq[self.cDLC] = 0
         # Gxc = np.array(np.matrix(Bmat.T)*np.matrix(Gqc).T).flatten()
-        Gxc = multi_dot([Bmat.T, Gqc.T]).flatten()
+        Gxc = np.dot(Bmat.T, Gq.T)
         return Gxc
 
     def build_dlc(self, xyz):
