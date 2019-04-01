@@ -50,19 +50,16 @@ from collections import OrderedDict, defaultdict
 if "forcebalance" in __name__:
     # If this module is part of ForceBalance, use the package level logger
     from .output import *
-elif "geometric" in __name__:
-    # This ensures logging behavior is consistent with the rest of geomeTRIC
-    from logging import *
-    logger = getLogger(__name__)
-    logger.setLevel(INFO)
+    package="ForceBalance"
 else:
-    # Previous default behavior if FB package level loggers could not be imported
     from logging import *
+    # Define two handlers that don't print newline characters at the end of each line
     class RawStreamHandler(StreamHandler):
-        """Exactly like output.StreamHandler except it does no extra formatting
-        before sending logging messages to the stream. This is more compatible with
-        how output has been displayed in ForceBalance. Default stream has also been
-        changed from stderr to stdout"""
+        """
+        Exactly like StreamHandler, except no newline character is printed at the end of each message.
+        This is done in order to ensure functions in molecule.py and nifty.py work consistently
+        across multiple packages.
+        """
         def __init__(self, stream = sys.stdout):
             super(RawStreamHandler, self).__init__(stream)
 
@@ -70,14 +67,37 @@ else:
             message = record.getMessage()
             self.stream.write(message)
             self.flush()
-    # logger=getLogger()
-    # logger.handlers = [RawStreamHandler(sys.stdout)]
-    # LPW: Daniel Smith suggested these changes to improve logger behavior
-    logger = getLogger("NiftyLogger")
-    logger.setLevel(INFO)
-    handler = RawStreamHandler()
-    logger.addHandler(handler)
 
+    class RawFileHandler(FileHandler):
+        """
+        Exactly like FileHandler, except no newline character is printed at the end of each message.
+        This is done in order to ensure functions in molecule.py and nifty.py work consistently
+        across multiple packages.
+        """
+        def __init__(self, *args, **kwargs):
+            super(RawFileHandler, self).__init__(*args, **kwargs)
+
+        def emit(self, record):
+            if self.stream is None:
+                self.stream = self._open()
+            message = record.getMessage()
+            self.stream.write(message)
+            self.flush()
+            
+    if "geometric" in __name__:
+        # This ensures logging behavior is consistent with the rest of geomeTRIC
+        logger = getLogger(__name__)
+        logger.setLevel(INFO)
+        package="geomeTRIC"
+    else:
+        logger = getLogger("NiftyLogger")
+        logger.setLevel(INFO)
+        handler = RawStreamHandler()
+        logger.addHandler(handler)
+        if __name__ == "__main__":
+            package = "LPW-nifty.py"
+        else:
+            package = __name__.split('.')[0]
 
 try:
     import bz2
@@ -92,7 +112,6 @@ try:
 except ImportError:
     logger.warning("gzip module import failed (used in compressing or decompressing pickle files)\n")
     HaveGZ = False
-
 
 ## Boltzmann constant
 kb = 0.0083144100163
@@ -507,16 +526,16 @@ def monotonic_decreasing(arr, start=None, end=None, verbose=False):
         end = len(arr) - 1
     a0 = arr[start]
     idx = [start]
-    if verbose: logger.info("Starting @ %i : %.6f" % (start, arr[start]))
+    if verbose: logger.info("Starting @ %i : %.6f\n" % (start, arr[start]))
     if end > start:
         i = start+1
         while i < end:
             if arr[i] < a0:
                 a0 = arr[i]
                 idx.append(i)
-                if verbose: logger.info("Including  %i : %.6f" % (i, arr[i]))
+                if verbose: logger.info("Including  %i : %.6f\n" % (i, arr[i]))
             else:
-                if verbose: logger.info("Excluding  %i : %.6f" % (i, arr[i]))
+                if verbose: logger.info("Excluding  %i : %.6f\n" % (i, arr[i]))
             i += 1
     if end < start:
         i = start-1
@@ -524,9 +543,9 @@ def monotonic_decreasing(arr, start=None, end=None, verbose=False):
             if arr[i] < a0:
                 a0 = arr[i]
                 idx.append(i)
-                if verbose: logger.info("Including  %i : %.6f" % (i, arr[i]))
+                if verbose: logger.info("Including  %i : %.6f\n" % (i, arr[i]))
             else:
-                if verbose: logger.info("Excluding  %i : %.6f" % (i, arr[i]))
+                if verbose: logger.info("Excluding  %i : %.6f\n" % (i, arr[i]))
             i -= 1
     return np.array(idx)
 
@@ -838,7 +857,7 @@ def getWQIds():
     global WQIDS
     return WQIDS
 
-def createWorkQueue(wq_port, debug=True, name='geomeTRIC'):
+def createWorkQueue(wq_port, debug=True, name=package):
     global WORK_QUEUE
     if debug:
         work_queue.set_debug_flag('all')
@@ -1086,7 +1105,7 @@ def listfiles(fnms=None, ext=None, err=False, dnm=None):
             raise RuntimeError
         answer = [fnms]
     elif fnms is not None:
-        logger.info(fnms)
+        logger.info(str(fnms))
         logger.error('First argument to listfiles must be a list, a string, or None')
         raise RuntimeError
     if answer == [] and ext is not None:
